@@ -509,3 +509,211 @@ plt.show()
 <br>
 
 ### 9.3.5 STEP 1(E STEP): γ 갱신
+
+부담률 γ를 모든 n과 k에 대해 갱신한다.
+@@@@@@@@@ 필기
+
+어떤 데이터 점 n에 착안했을 때, 그 데이터 점에서의 각 가우스 함수의 높이(a_k)를 구한다.
+그리고 k에서 합을 취해 1이 되도록 a_k의 총합으로 나누어 규격화한 것을 γ_nk로 한다.
+-> '가우스 함수의 값이 높을수록 부담률도 높아진다.'
+
+E Step을 진행하는 함수 `e_step_mixgauss`를 정의한다.
+
+```python
+# gamma를 갱신 (E STEP) --------------------------
+def e_step_mixgauss(x, pi, mu, sigma):
+    N, D = x.shape
+    K = len(pi)
+    y = np.zeros((N, K))
+
+    for k in range(K):
+        y[:, k] = gauss(x, mu[k, :], sigma[k, :, :])    #KxN
+
+    gamma = np.zeros((N, K))
+
+    for n in range(N):
+        wk = np.zeros(K)
+        for k in range(K):
+            wk[k] = pi[k]*y[n, k]
+        gamma[n, :] = wk/np.sum(wk)
+
+    return gamma
+
+
+# 메인 ----------------------------------------------
+Gamma = e_step_mixgauss(X, Pi, Mu, Sigma)
+```
+
+```python
+plt.figure(1, figsize=(4, 4))
+show_mixgauss_prm(X, Gamma, Pi, Mu, Sigma)
+plt.show()
+```
+
+@@@@@@@@@@@@@ 이미지
+
+<br>
+
+### 9.3.6 STEP 2(M STEP): π, μ, Σ의 갱신
+
+각 클러스터에 대한 부담률의 합 N_k를 구한다.
+@@@@@@ 필기
+
+이는 K-means 기법에서 말하는 각 클러스터에 속할 데이터의 수에 해당한다.
+혼합률 π_k를 갱신한다.
+@@@@@@ 필기
+
+N은 전체 데이터 수이므로 혼합률은 전체에 대한 클러스터 내 수의 비율이 되는, 적합한 갱신식이라고 할 수 있다.
+중심 벡터 μ_k를 갱신한다.
+@@@@@@ 필기
+이 식은 클러스터에 부담률의 가중치를 더한 데이터의 평균이 되고 있다.
+
+마지막으로 가우스의 공분산 행렬을 갱신한다.
+
+M Step을 수행하는 함수 `m_step_mixgauss`를 만든다.
+
+```python
+# Pi, Mu, Sigma 갱신 (M STEP) --------------------
+def m_step_mixgauss(x, gamma):
+    N, D = x.shape
+    N, K = gamma.shape
+
+    # Pi를 계산
+    pi = np.sum(gamma, axis=0)/N        # x축을 기준으로 합을 구하는 연산.
+
+    # Mu를 계산
+    mu = np.zeros((K, D))
+    for k in range(K):
+        for d in range(D):
+            mu[k, d] = np.dot(gamma[:, k], x[:, d]) / np.sum(gamma[:, k])
+
+    # Sigma를 계산
+    sigma = np.zeros((K, D, D))
+    for k in range(K):
+        for n in range(N):
+            wk = x - mu[k, :]
+            wk = wk[n, :, np.newaxis]       # x차원을 y차원의 벡터로 변환할 때 사용하는 np.newaxis 함수.
+            sigma[k, :, :] = sigma[k, :, :] + gamma[n, k] * np.dot(wk, wk.T)
+        sigma[k, :, :] = sigma[k, :, :] / np.sum(gamma[:, k])
+    return pi, mu, sigma
+
+
+
+# 메인 -----------------------------------------------
+Pi, Mu, Sigma = m_step_mixgauss(X, Gamma)
+```
+
+```python
+# 화면에 나타내기 ------------------------------------
+plt.figure(1, figsize=(4, 4))
+show_mixgauss_prm(X, Gamma, Pi, Mu, Sigma)
+plt.show()
+```
+
+@@@@@@@@@@@@@@ 이미지
+
+중심 벡터를 나타내는 ★이 훨씬 더 클러스터의 중심으로 이동했다.
+
+E step과 M step을 더이상 매개변수가 변하지 않을 때까지 반복한다.
+
+```python
+Pi = np.array([0.3, 0.3, 0.4])
+Mu = np.array([[2, 2], [-2, 0], [2, -2]])
+Sigma = np.array([[[1, 0], [0, 1]],
+                  [[1, 0], [0, 1]],
+                  [[1, 0], [0, 1]]])
+Gamma = np.c_[np.ones((N, 1)), np.zeros((N, 2))]
+
+plt.figure(1, figsize=(10, 6.5))
+max_it = 20
+
+i_subplot=1
+
+for it in range(0, max_it):
+    Gamma = e_step_mixgauss(X, Pi, Mu, Sigma)
+    if it<4 or it>17:
+        plt.subplot(2, 3, i_subplot)
+        show_mixgauss_prm(X, Gamma, Pi, Mu, Sigma)
+        plt.title("{0:d}".format(it+1))
+        plt.xticks(range(X_range0[0], X_range0[1]), "")
+        plt.yticks(range(X_range1[0], X_range1[1]), "")
+        i_subplot = i_subplot+1
+    Pi, Mu, Sigma = m_step_mixgauss(X, Gamma)
+plt.show()
+```
+
+@@@@@@@@@@@@@ 이미지
+
+K-means 기법과는 달리, 각 데이터의 클러스터에 소속이 부담률이라는 확률로 표현되었다.
+클러스터의 경계 부근에서는 중간적인 색으로 나타난다.
+
+가우시안 혼합 모델에서는 클러스터링의 장점을 평가하기 위해서 '가능도'를 사용한다.
+
+<br>
+
+<br>
+
+### 9.3.7 가능도
+
+X가 생성된 확률(가능도)이 가장 높도록 매개변수가 갱신되고 있다.
+
+@@@@@@@@ 필기
+
+매개변수를 기본값으로 다시 초기화하여 오차함수 E(π, μ, Σ)가 알고리즘의 갱신 단계에서 단조롭게 감소했는지 알아보자.
+
+오차함수를 정의한다.
+
+```python
+# 혼합 가우스의 목적 함수 -----------------------------------
+def nlh_mixgauss(x, pi, mu, sigma):
+    # x     : NxD
+    # pi    : Kx1
+    # mu    : KxD
+    # sigma : KxDxD
+    # output lh : NxK
+    N, D = x.shape
+    K = len(pi)
+    y = np.zeros((N, K))
+
+    for k in range(K):
+        y[:, k] = gauss(x, mu[k, :], sigma[k, :, :])    # KxN
+
+    lh = 0
+
+    for n in range(N):
+        wk = 0
+        for k in range(K):
+            wk = wk + pi[k]*y[n, k]
+        lh = lh + np.log(wk)
+
+    return -lh
+```
+
+오차 함수의 변화를 그래프로 보자.
+
+```python
+Pi = np.array([0.3, 0.3, 0.4])
+Mu = np.array([[2, 2], [-2, 0], [2, -2]])
+Sigma = np.array([[[1, 0], [0, 1]], [[1, 0], [0, 1]], [[1, 0], [0, 1]]])
+Gamma = np.c_[np.ones((N, 1)), np.zeros((N, 2))]
+
+
+max_it = 20
+it = 0
+Err = np.zeros(max_it) # distortion measure
+for it in range(0, max_it):
+    Gamma = e_step_mixgauss(X, Pi, Mu, Sigma)
+    Err[it] = nlh_mixgauss(X,Pi,Mu,Sigma)
+    Pi, Mu, Sigma = m_step_mixgauss(X, Gamma)
+
+
+print(np.round(Err, 2))
+plt.figure(2, figsize=(4, 4))
+plt.plot(np.arange(max_it) + 1,
+Err, color='k', linestyle='-', marker='o')
+#plt.ylim([40, 80])
+plt.grid(True)
+plt.show()
+```
+
+@@@@@@@@@@@@@@ 이미지
